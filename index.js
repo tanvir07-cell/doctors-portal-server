@@ -26,10 +26,37 @@ async function run() {
       .db("docotrs_portal")
       .collection("services");
 
+    const bookingCollection = client
+      .db("docotrs_portal")
+      .collection("bookings");
+
     app.get("/service", async (req, res) => {
       const cursor = serviceCollection.find({});
       const services = await cursor.toArray();
       res.send(services);
+    });
+
+    // for booking post:
+    app.post("/booking", async (req, res) => {
+      const booking = req.body;
+      // user booking only one specific service per day:
+      const query = {
+        treatment: booking?.treatment,
+        date: booking?.date,
+        patientEmail: booking?.patientEmail,
+      };
+
+      const existingBookings = await bookingCollection.findOne(query);
+
+      if (existingBookings) {
+        return res.send({
+          success: false,
+          booking: existingBookings,
+        });
+      }
+
+      const result = await bookingCollection.insertOne(booking);
+      return res.send({ success: true, result });
     });
   } finally {
   }
