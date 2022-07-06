@@ -12,6 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 // verify jwt token:
+// ei function er kaaj hocceh kono user jate amar servier side er data gula dekhte nah pare:
 
 function verifyJWT(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -50,16 +51,49 @@ async function run() {
 
     const userCollection = client.db("docotrs_portal").collection("users");
 
+    const doctorCollection = client.db("docotrs_portal").collection("doctors");
+
     app.get("/service", async (req, res) => {
-      const cursor = serviceCollection.find({});
+      // .project diye shudu specific kore name field ti kei dekhabe amar server side er api teh:
+      const cursor = serviceCollection.find({}).project({ name: 1 });
       const services = await cursor.toArray();
       res.send(services);
     });
 
     // get all the users:
-    app.get("/user", async (req, res) => {
+    app.get("/user", verifyJWT, async (req, res) => {
       const result = await userCollection.find({}).toArray();
       res.send(result);
+    });
+
+    // check korbo user ti admin kina nicher ei get method diye:
+    app.get("/admin/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await userCollection.findOne({ email: email });
+      const isAdmin = user.role === "admin";
+      res.send({ admin: isAdmin });
+    });
+
+    // kono user jate admin banate pare arekti user ke tar jonne ei put method ti:
+    app.put("/user/admin/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+      // kon user admin banabe seti thakbe requester er modde:
+      const requester = req.decoded.email;
+      const requesterAccount = await userCollection.findOne({
+        email: requester,
+      });
+      if (requesterAccount.role === "admin") {
+        const filter = { email: email };
+
+        const updateDoc = {
+          $set: { role: "admin" },
+        };
+        const result = await userCollection.updateOne(filter, updateDoc);
+
+        res.send(result);
+      } else {
+        res.status(403).send({ message: "forbidden" });
+      }
     });
 
     // for the signIn or googleSignIn users:
@@ -116,7 +150,7 @@ async function run() {
       res.send(services);
     });
 
-    // for booking get api:
+    // for booking get api(dashboard er ui teh kon kon user kon kon bookings koreche tar jonne):
 
     app.get("/booking", verifyJWT, async (req, res) => {
       const patientEmail = req.query.patientEmail;
@@ -150,6 +184,13 @@ async function run() {
 
       const result = await bookingCollection.insertOne(booking);
       return res.send({ success: true, result });
+    });
+
+    // adding doctor to the database:
+    app.post("/doctor", async (req, res) => {
+      const doctor = req.body;
+      const result = await doctorCollection.insertOne(doctor);
+      res.send(result);
     });
   } finally {
   }
